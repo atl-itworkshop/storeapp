@@ -1,0 +1,82 @@
+version: '3.7'
+
+services:
+  # api service
+  api:
+    user: root
+    build:
+      context: ./MyNodeJsProject
+      args:
+        BUILD_ENV: "development"
+    env_file:
+      - ./MyNodeJsProject/config/config.env
+    # environment section overrides the env_file section
+    environment:        
+      - MONGODB_URI=mongodb://mongo:27017/
+    ports:
+      - 8081:5000
+    depends_on:
+      - mongo
+    volumes:
+      - $HOME/.cache/yarn-offline-mirror:/home/node/.cache/yarn-offline-mirror
+      - api-yarn:/home/node/.cache/yarn
+      - ./MyNodeJsProject:/usr/local/src/MyNodeJsProject
+      - api_empty_node_modules:/usr/local/src/MyNodeJsProject/node_modules # do not link node_modules in, and persist it between dc up runs
+      - api_node_modules:/usr/local/src/node_modules
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s      
+
+  # mongo db service
+  mongo:
+    image: mongo:3.6.3
+    ports:
+      - "27017"
+    volumes:
+      - api-mongo-db:/data/db
+    healthcheck:
+      test: echo 'db.stats().ok' | mongo localhost:27017/local --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5     
+
+  # web service
+  web:
+    user: root
+    build:
+      context: ./basic-react-project
+      args:
+        BUILD_ENV: "development"
+    environment:
+      # This is the api url named confusingly :)
+      - REACT_APP_HOSTED_URL=http://localhost:8081
+    ports:
+      - 8080:3000
+    depends_on:
+      - mongo
+      - api  
+    volumes:
+      - $HOME/.cache/yarn-offline-mirror:/home/node/.cache/yarn-offline-mirror
+      - web-yarn:/home/node/.cache/yarn
+      - ./basic-react-project:/usr/local/src/basic-react-project
+      - web_empty_node_modules:/usr/local/src/basic-react-project/node_modules # do not link node_modules in, and persist it between dc up runs
+      - web_node_modules:/usr/local/src/node_modules
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 1m      
+  
+volumes:
+  web-yarn:
+  api-yarn:
+  api-mongo-db:
+  api_empty_node_modules:
+  api_node_modules:
+  web_empty_node_modules:
+  web_node_modules:
+    
